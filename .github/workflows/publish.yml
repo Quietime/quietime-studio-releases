@@ -1,0 +1,35 @@
+name: Publish staged APK
+
+on:
+  push:
+    branches:
+      - "incoming/**"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#incoming/}"
+          APK="$(find . -maxdepth 1 -type f -name 'QuietimeStudio-*.apk' -print -quit)"
+          SHA_FILE="${APK}.sha256"
+          test -n "$APK"
+          test -f "$SHA_FILE"
+          EXPECTED="$(cut -d ' ' -f 1 "$SHA_FILE")"
+          ACTUAL="$(sha256sum "$APK" | cut -d ' ' -f 1)"
+          test "$EXPECTED" = "$ACTUAL"
+          ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1
+          gh release create "$TAG" "$APK#Quietime Studio APK" "$SHA_FILE#SHA-256" \
+            --repo "$GITHUB_REPOSITORY" --title "Quietime Studio $TAG" --generate-notes
+      - name: Remove one-time staging branch
+        if: ${{ success() }}
+        run: git push origin --delete "$GITHUB_REF_NAME"
