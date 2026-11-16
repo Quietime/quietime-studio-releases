@@ -6,8 +6,11 @@
 | --- | --- |
 | `template_transparent.png` | 透明底 PNG（1920×2860，RGBA），照片位 alpha = 0 |
 | `template_green.png` | 绿幕版，照片位为纯绿 `#00FF00` |
+| `template_transparent_2x.png` | 2 倍超分版透明底 PNG（3840×5720），照片位坐标全部 ×2 |
+| `template_green_2x.png` | 2 倍超分版绿幕 |
 | `slot_mask.png` | 8 个照片位的矩形蒙版（白 = 照片位） |
-| `extract_template.py` | 生成以上文件的脚本 |
+| `extract_template.py` | 生成 1 倍文件的脚本 |
+| `assemble_2x.py` | 用超分后的边框合成 2 倍文件的脚本 |
 
 ## 照片位坐标（像素）
 
@@ -42,3 +45,9 @@ python3 extract_template.py 原图.jpg 输出目录
 ```
 
 原图含人像，未放入仓库。
+
+## 2 倍版本
+
+边框颜色用 Real-ESRGAN（x4plus）放大 4 倍后缩到 2 倍；透明度不经过 AI：照片位矩形在 2 倍尺寸下
+重新精确绘制，装饰的透明度由 1 倍模板重采样。超分是推测出的细节，观感更清晰，但不是无损，
+也不是矢量图——这类渲染图描成矢量只会损失细节。

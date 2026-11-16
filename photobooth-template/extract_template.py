@@ -295,6 +295,12 @@ def main(src_path, out_dir):
             for gx0, gy0, gx1, gy1 in GLOW.get((k, y), ()):
                 glow[gy0:gy1, gx0:gx1] = True
             a, D = matte(side, P, sup[k], uncertain, glow, red_frame=(k == 1))
+            if k == 0:
+                # The pale frame has no saturated red of its own, so any such
+                # pixel still standing over a slot is leftover photo wall.
+                b_, g_, r_ = (side[..., i].astype(np.int32) for i in range(3))
+                wall = (r_ > 80) & (g_ < 70) & (b_ < 80) & (r_ > 2 * np.maximum(g_, b_))
+                a[wall & ~glow] = 0
             alpha[y:y + SLOT_H, x:x + SLOT_W] = a
             color[y:y + SLOT_H, x:x + SLOT_W] = D
             plate[y:y + SLOT_H, x:x + SLOT_W] = np.round(P).astype(np.uint8)
