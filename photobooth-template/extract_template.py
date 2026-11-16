@@ -69,12 +69,29 @@ def nearest_values(valid, values):
     return lut[labels]
 
 
-def matte(side, P, support, uncertain, glow):
+def solidify(alpha):
+    """Mask of a decoration made solid, for a frame whose decorations are red.
+
+    Red roses on the red wall: parts of a flower equal the photo colour and
+    would be cut out with it. Decorations only sit along the slot edge as
+    compact blobs, so close their outline and fill every small pocket.
+    """
+    solid = (alpha > 0.5).astype(np.uint8)
+    filled = cv2.morphologyEx(solid, cv2.MORPH_CLOSE, disk(3)) > 0
+    n, lab, st, _ = cv2.connectedComponentsWithStats((~filled).astype(np.uint8), connectivity=4)
+    pocket = np.zeros(n, bool)
+    pocket[1:] = st[1:, cv2.CC_STAT_AREA] < 300
+    return filled | pocket[lab]
+
+
+def matte(side, P, support, uncertain, glow, red_frame):
     """Alpha + un-mixed colour of the decoration lying over `side`.
 
     P is the clean photo behind it, `support` where this side may be decorated,
     `uncertain` where P had to be inpainted (both frames decorated), `glow`
     where the frame has a soft halo (smooth, mid-strength, never solid).
+    `red_frame`: this frame's decorations are red like the photo's wall, so a
+    pixel matching the photo proves nothing - keep decorations solid instead.
     """
     S = side.astype(np.float32)
     e = S - P
@@ -146,6 +163,9 @@ def matte(side, P, support, uncertain, glow):
     small[1:] = st[1:, cv2.CC_STAT_AREA] < 12
     alpha[small[lab] & holes] = 1
 
+    if red_frame:
+        alpha[solidify(alpha) & support] = 1
+
     # Un-mix the colour so no photo red survives in soft edges / glow.
     safe = np.maximum(alpha, 1e-3)[..., None]
     unmixed = np.clip(P + e / safe, 0, 255)
@@ -165,6 +185,10 @@ def matte(side, P, support, uncertain, glow):
     a_strip = np.where((a_in > 0.9) & (mag < 8), 0, a_in)
     D = np.where(strip[..., None], np.where((a_strip > 0.9)[..., None], S, d_in), D)
     alpha = np.where(strip, a_strip, alpha)
+    if red_frame:  # once more, now including the edge strip
+        newly = solidify(alpha) & support & (alpha < 1)
+        alpha[newly] = 1
+        D = np.where(newly[..., None], S, D)
     return alpha.astype(np.float32), D
 
 
@@ -270,7 +294,7 @@ def main(src_path, out_dir):
             glow = np.zeros(P.shape[:2], bool)
             for gx0, gy0, gx1, gy1 in GLOW.get((k, y), ()):
                 glow[gy0:gy1, gx0:gx1] = True
-            a, D = matte(side, P, sup[k], uncertain, glow)
+            a, D = matte(side, P, sup[k], uncertain, glow, red_frame=(k == 1))
             alpha[y:y + SLOT_H, x:x + SLOT_W] = a
             color[y:y + SLOT_H, x:x + SLOT_W] = D
             plate[y:y + SLOT_H, x:x + SLOT_W] = np.round(P).astype(np.uint8)
